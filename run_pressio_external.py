@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 跑 3 次 pressio (x,y,z)，得到 qoi 需要的 dists。
@@ -34,7 +35,7 @@ def main():
         "-t", "float",
         "-b", f"compressor={compressor}", "-o", f"rel={args.rel}",
         "-b", "qoi:metric=external",
-        "-o", f"external:command=python {PIPELINE} --external_mode --original_input {prefix}",
+        "-o", f"external:command=python {PIPELINE} --external_mode --original_input {prefix} --compressor {compressor} --rel {args.rel}",
         "-b", "external:launch_metric=print", "-o", "external:use_many=1",
         "-m", "qoi", "-M", "all",
     ]

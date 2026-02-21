@@ -32,6 +32,8 @@ parser.add_argument("--dim", type=int, action="append", help="Dimensions (e.g. -
 parser.add_argument("--compressor", default="sperr", help="Compressor (default: sperr)")
 parser.add_argument("--rel", type=float, default=1e-4, help="Relative error (default: 1e-4)")
 parser.add_argument("--pressio", default="pressio", help="Pressio CLI (default: pressio)")
+parser.add_argument("--pressio-opts", action="append", default=[], help="Extra pressio options as key=value (e.g. sz3:algorithm_str=ALGO_LORENZO_REG)")
+parser.add_argument("--print-pressio-cmd", action="store_true", help="Print the pressio -W command for the first axis and exit (for debugging).")
 
 args, _ = parser.parse_known_args()
 
@@ -92,8 +94,14 @@ for axis in "xyz":
         "-t", "float",
         "-b", f"compressor={args.compressor}",
         "-o", f"rel={args.rel}",
-        "-W", out,
     ]
+    for opt in args.pressio_opts:
+        cmd.extend(["-o", opt])
+    cmd.extend(["-W", out])
+
+    if args.print_pressio_cmd:
+        sys.stderr.write("pressio command: " + " ".join(cmd) + "\n")
+        sys.exit(0)
 
     result = subprocess.run(cmd, capture_output=True, text=True)
 

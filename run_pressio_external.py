@@ -1,12 +1,9 @@
 
 #!/usr/bin/env python3
-"""
-跑 3 次 pressio (x,y,z)，得到 qoi 需要的 dists。
-用法: python run_pressio_external.py --prefix <path> --nt <n> --na <n> [--rel 1e-4] [--qoi-out ...]
-运行前可 source env.sh 或设置 PRESSIO_CMD。
-"""
-import argparse
 import os
+os.environ.pop("PYTHONPATH", None)
+os.environ["PYTHONNOUSERSITE"] = "1" 
+import argparse
 import subprocess
 import sys
 
@@ -46,9 +43,11 @@ def main():
     pipeline_opts = f"--original_input {prefix} --compressor {compressor} --rel {args.rel}"
     for opt in pressio_opts:
         pipeline_opts += f" --pressio-opts {opt}"
+    # 必须用当前 Python（rdf_env），否则 pressio 用系统 python 调 pipeline 会缺 numba，dists 为空，不会打 [QOI] Statistics
+    python_exe = os.path.abspath(sys.executable)
     base_opts.extend([
         "-b", "qoi:metric=external",
-        "-o", f"external:command=python {PIPELINE} --external_mode {pipeline_opts}",
+        "-o", f"external:command={python_exe} {PIPELINE} --external_mode {pipeline_opts}",
         "-b", "external:launch_metric=print", "-o", "external:use_many=1",
         "-m", "qoi", "-M", "all",
     ])
@@ -59,13 +58,8 @@ def main():
             print(" ".join(cmd))
             sys.exit(0)
         if axis == "z":
-            r = subprocess.run(cmd, capture_output=True, text=True, cwd=RDF_DIR)
-            out = r.stdout or ""
-            err = r.stderr or ""
-            if err:
-                sys.stderr.write(err)
-            sys.stdout.write(out)
-            sys.stdout.flush()
+            # 不 capture，让 pressio 直接写当前进程的 stdout，这样被 run_rdf_pressio 调用时 [QOI] 能进管道
+            r = subprocess.run(cmd, cwd=RDF_DIR)
         else:
             r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=sys.stderr, cwd=RDF_DIR)
         if r.returncode != 0:

@@ -72,10 +72,17 @@ if args.standalone:
     os.makedirs(dec_dir, exist_ok=True)
     dec_paths = {}
     axes_to_run_pressio = list("xyz")
+    expected_bytes = nt * na * 4
     # STEP 1 — pressio -W for x, y, z
     for axis in axes_to_run_pressio:
         inp = f"{prefix}.{axis}.f32.dat"
         out = os.path.join(dec_dir, f"{axis}.bin")
+        # 必须删掉旧文件再 -W，否则若 pressio 只写部分或失败，会留下 100x8192000 等残留 → reshape 错
+        try:
+            if os.path.isfile(out):
+                os.remove(out)
+        except OSError:
+            pass
         cmd = [
             args.pressio,
             "-i", inp,
@@ -90,9 +97,28 @@ if args.standalone:
         if args.print_pressio_cmd:
             sys.stderr.write("pressio: " + " ".join(cmd) + "\n")
             sys.exit(0)
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # 禁止 capture_output：pressio 会刷大量 composite 行，PIPE 塞满 → 死锁，外层只看到 returncode!=0 且日志空
+        result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if result.returncode != 0:
-            sys.stderr.write(result.stderr or "")
+            sys.stderr.write(f"[pipeline] axis={axis} pressio -W exit {result.returncode}\n")
+            sys.stderr.flush()
+            output_metrics({"dists": []})
+            sys.exit(1)
+        if not os.path.isfile(out):
+            sys.stderr.write(f"[pipeline] pressio -W missing output {out}\n")
+            output_metrics({"dists": []})
+            sys.exit(1)
+        got = os.path.getsize(out)
+        if got != expected_bytes:
+            sys.stderr.write(
+                f"[pipeline] axis={axis} -W size mismatch: got {got} bytes, "
+                f"need {expected_bytes} (nt*na*4={nt}*{na}*4). Remove stale rdf_tmp/*.bin and retry.\n"
+            )
+            sys.stderr.flush()
+            try:
+                os.remove(out)
+            except OSError:
+                pass
             output_metrics({"dists": []})
             sys.exit(1)
         dec_paths[axis] = out
@@ -183,9 +209,16 @@ for a in "xyz":
 axes_to_run_pressio = [a for a in "xyz" if a not in dec_paths]
 
 # STEP 1 — run pressio -W only for axes not provided by LibPressio
+expected_bytes = nt * na * 4
 for axis in axes_to_run_pressio:
     inp = f"{prefix}.{axis}.f32.dat"
     out = os.path.join(dec_dir, f"{axis}.bin")
+    # 与 standalone 一致：先删再 -W，避免残留；写后验长，否则 reshape 在 run_pressio_rdf 里才崩且看不到本消息
+    try:
+        if os.path.isfile(out):
+            os.remove(out)
+    except OSError:
+        pass
 
     cmd = [
         args.pressio,
@@ -204,10 +237,31 @@ for axis in axes_to_run_pressio:
         sys.stderr.write("pressio command: " + " ".join(cmd) + "\n")
         sys.exit(0)
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     if result.returncode != 0:
-        sys.stderr.write(result.stderr or "")
+        sys.stderr.write(f"[pipeline] axis={axis} pressio -W exit {result.returncode}\n")
+        sys.stderr.flush()
+        output_metrics({"dists": []})
+        sys.exit(1)
+
+    if not os.path.isfile(out):
+        sys.stderr.write(f"[pipeline] axis={axis} pressio -W missing output {out}\n")
+        output_metrics({"dists": []})
+        sys.exit(1)
+    got = os.path.getsize(out)
+    if got != expected_bytes:
+        msg = (
+            f"[pipeline] axis={axis} -W size mismatch: got {got} bytes, "
+            f"need {expected_bytes} (nt*na*4={nt}*{na}*4). "
+            f"pressio -W truncated; use smaller nt*na or chunked pipeline.\n"
+        )
+        sys.stderr.write(msg)
+        sys.stderr.flush()
+        try:
+            os.remove(out)
+        except OSError:
+            pass
         output_metrics({"dists": []})
         sys.exit(1)
 

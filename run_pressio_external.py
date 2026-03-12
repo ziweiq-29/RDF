@@ -31,9 +31,19 @@ def main():
     p.add_argument("--pressio-opts", dest="pressio_opts", action="append", default=[],
                    help="Extra pressio options as key=value. Can repeat.")
     p.add_argument("--print-cmd", action="store_true", help="Print the pressio command for first axis and exit.")
+    p.add_argument("--clean-tmp", action="store_true",
+                   help="Remove RDF/rdf_tmp/*.bin before run to avoid stale truncated bins from previous jobs.")
     args = p.parse_args()
 
     prefix = args.prefix.rstrip(".")
+    if args.clean_tmp:
+        import glob
+        tmp_dir = os.path.join(RDF_DIR, "rdf_tmp")
+        for f in glob.glob(os.path.join(tmp_dir, "*.bin")):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
     python_exe = sys.executable
     pipeline_opts = f"--original_input {prefix} --dim {args.nt} --dim {args.na} --compressor {args.compressor} --rel {args.rel} --pressio {args.pressio}"
     for opt in args.pressio_opts:

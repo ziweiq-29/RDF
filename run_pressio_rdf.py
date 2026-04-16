@@ -132,16 +132,20 @@ def _accumulate_hist(pos, ref_indices, hist, L, rmax, dr):
                     j = head[cid]
                     while j != -1:
 
-                        if j != i:
+                        # if j != i:
+                        if j > i:
 
                             dx = pos[i,0] - pos[j,0]
                             dy = pos[i,1] - pos[j,1]
                             dz = pos[i,2] - pos[j,2]
 
                             # minimum image
-                            dx -= L[0] * np.rint(dx * invL0)
-                            dy -= L[1] * np.rint(dy * invL1)
-                            dz -= L[2] * np.rint(dz * invL2)
+                            # dx -= L[0] * np.rint(dx * invL0)
+                            # dy -= L[1] * np.rint(dy * invL1)
+                            # dz -= L[2] * np.rint(dz * invL2)
+                            dx = pos[i,0] - pos[j,0]
+                            dy = pos[i,1] - pos[j,1]
+                            dz = pos[i,2] - pos[j,2]
 
                             r2 = dx*dx + dy*dy + dz*dz
                             if r2 < rmax*rmax:
@@ -191,7 +195,8 @@ def compute_rdf_numba(pos, bins=300, sample_ratio=0.01, seed=0):
     r = (edges[:-1] + edges[1:]) / 2
     vol_shell = 4 * np.pi * (edges[1:]**3 - edges[:-1]**3) / 3
 
-    ideal = n_ref * rho * vol_shell
+    #ideal = n_ref * rho * vol_shell 
+    ideal = N * rho * vol_shell
     np.maximum(ideal, 1e-300, out=ideal)
 
     g = hist / ideal
@@ -224,7 +229,8 @@ def _compute_rdf_numpy(pos, bins=300, sample_ratio=0.01):
     # -----------------------------
     # Build cell list
     # -----------------------------
-    cell_size = rmax / 10
+    # cell_size = rmax / 10
+    cell_size = rmax
     ncell = np.maximum((L / cell_size).astype(int), 1)
 
     cells = {}
@@ -321,9 +327,10 @@ def rdf_distance(g1, g2):
 def main():
     parser = argparse.ArgumentParser(description="RDF: raw vs decompressed → dists")
     parser.add_argument("--standalone", action="store_true", required=True, help="必须：读三份解压文件")
-    parser.add_argument("--decompressed_x", required=True, help="解压后的 x 文件")
-    parser.add_argument("--decompressed_y", required=True, help="解压后的 y 文件")
-    parser.add_argument("--decompressed_z", required=True, help="解压后的 z 文件")
+    parser.add_argument("--raw-only", action="store_true", help="只计算 raw RDF，并输出 rdf_raw.npy")
+    parser.add_argument("--decompressed_x", help="解压后的 x 文件（非 --raw-only 时必填）")
+    parser.add_argument("--decompressed_y", help="解压后的 y 文件（非 --raw-only 时必填）")
+    parser.add_argument("--decompressed_z", help="解压后的 z 文件（非 --raw-only 时必填）")
     parser.add_argument("--raw_prefix", default=DEFAULT_RAW_PREFIX, help=f"Raw .x/.y/.z.f32.dat 前缀 (default: {DEFAULT_RAW_PREFIX})")
     parser.add_argument("--nt", type=int, default=DEFAULT_NT, help=f"时间步数 (default: {DEFAULT_NT})")
     parser.add_argument("--na", type=int, default=DEFAULT_NA, help=f"原子数 (default: {DEFAULT_NA})")
@@ -331,6 +338,13 @@ def main():
 
     nt, na = args.nt, args.na
     raw_prefix = args.raw_prefix
+
+    coords_raw = read_raw_frame(raw_prefix, timestep, nt, na)
+    rdf_raw = compute_rdf(coords_raw)
+    
+
+    if args.raw_only:
+        return
 
     for k in ("decompressed_x", "decompressed_y", "decompressed_z"):
         path = getattr(args, k)

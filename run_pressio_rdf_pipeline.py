@@ -14,6 +14,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import numpy as np
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -283,7 +284,11 @@ rdf_cmd = [
     "--decompressed_z", dec_paths["z"],
 ]
 
+t0 = time.perf_counter()
 res = subprocess.run(rdf_cmd, capture_output=True, text=True, cwd=SCRIPT_DIR)
+app_sec = time.perf_counter() - t0
+# Parsed by compression_framework/run_rdf_pressio.py as app_eval_sec.
+print(f"[EXAALT_APP] app_eval_sec={app_sec:.15g}", file=sys.stderr, flush=True)
 
 if res.returncode != 0:
     sys.stderr.write(res.stderr or "")
